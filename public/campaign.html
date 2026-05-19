@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Campaign</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --border:#2a313c; --text:#e6edf3;
+    --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'SF Pro',system-ui,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  nav a { color:var(--muted); margin-left:18px; text-decoration:none; font-size:13px; }
+  nav a:hover, nav a.active { color:var(--text); }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+           padding:20px; margin-bottom:20px; }
+  .panel h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--muted);
+              text-transform:uppercase; letter-spacing:.05em; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500; }
+  input, textarea, select {
+    width:100%; background:#0d1117; border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:10px 12px; font:inherit;
+  }
+  textarea { min-height:80px; resize:vertical; font-family:inherit; }
+  textarea.body { min-height:200px; font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:13px; }
+  .row { display:grid; gap:14px; margin-bottom:14px; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+  button { background:var(--accent); color:#0d1117; border:none; padding:9px 16px;
+           border-radius:6px; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+  button.danger { background:transparent; border:1px solid var(--red); color:var(--red); }
+  button.small { padding:5px 10px; font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  a { color:var(--accent); text-decoration:none; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; }
+  .pill.approved { background:rgba(63,185,80,.15); color:var(--green); }
+  .pill.draft, .pill.unapproved { background:rgba(210,153,34,.15); color:var(--amber); }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; }
+  .tab { padding:10px 16px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent;
+         font-size:13px; font-weight:500; }
+  .tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .tab .pill { margin-left:6px; }
+  .stage-content { display:none; }
+  .stage-content.active { display:block; }
+  .preview { background:#0d1117; border:1px solid var(--border); border-radius:6px;
+             padding:14px; margin-top:14px; font-family:ui-monospace,monospace; font-size:13px; }
+  .preview-meta { color:var(--muted); font-size:11px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .preview-body { white-space:pre-wrap; }
+  .attachments { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .attachment { display:flex; align-items:center; gap:6px; background:#0d1117; padding:6px 10px;
+                border-radius:4px; font-size:12px; border:1px solid var(--border); }
+  .attachment .remove { color:var(--red); cursor:pointer; }
+  .ok { color:var(--green); }
+  .err { color:var(--red); margin-top:8px; }
+  .signal { display:inline-block; padding:1px 6px; background:rgba(88,166,255,.15); color:var(--accent);
+            border-radius:8px; font-size:10px; margin-right:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Creator Scraper</h1>
+  <nav>
+    <a href="/">Jobs</a>
+    <a href="/creators.html">CRM</a>
+    <a href="/campaigns.html" class="active">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div id="campaignHeader" class="panel"></div>
+
+  <div class="panel">
+    <h2>Templates (5 Stages)</h2>
+    <p class="hint" style="margin-top:0">
+      Each stage has its own subject line, body, and personalization instructions. Use <code>[PERSONALIZED]</code>
+      in the body where Claude should inject the personalized portion. Other placeholders supported:
+      <code>{{name}}</code>, <code>{{first_name}}</code>, <code>{{handle}}</code>.
+      Generate a sample to preview, then approve. Editing an approved template resets approval.
+    </p>
+    <div class="tabs" id="tabs"></div>
+    <div id="stages"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Attachments</h2>
+    <p class="hint" style="margin-top:0">Files attached to outgoing emails as real attachments (paperclip in Gmail, not inline).</p>
+    <div class="attachments" id="attachmentsList"></div>
+    <div class="row" style="margin-top:14px">
+      <input type="file" id="attachFile" accept="image/*,application/pdf">
+      <div class="hint">Max 15MB per file. Currently apply to all 5 stages.</div>
+    </div>
+    <button onclick="uploadAttachment()" class="small">Upload</button>
+    <span id="attachMsg" class="hint" style="margin-left:10px"></span>
+  </div>
+
+  <div class="panel">
+    <h2>Assign Creators</h2>
+    <p class="hint" style="margin-top:0">
+      Pull creators directly from a scrape job's matched results, or paste handles manually.
+      The tool reads the creator's email from the contacts table (extracted during bio scraping).
+    </p>
+    <div class="row two">
+      <div>
+        <label>From scrape job (matched creators only)</label>
+        <select id="fromJob"><option value="">— Pick a job —</option></select>
+      </div>
+      <div>
+        <label>Optional cue filter (comma-separated)</label>
+        <input id="cueFilter" type="text" placeholder="e.g. nurse, RN, ICU">
+        <div class="hint">Filter matched creators to only those whose match_cues include any of these.</div>
+      </div>
+    </div>
+    <div class="row">
+      <label>OR paste handles manually (one per line)</label>
+      <textarea id="manualHandles" placeholder="@somebody&#10;@another"></textarea>
+    </div>
+    <button onclick="assignCreators()">Assign</button>
+    <span id="assignMsg" class="hint" style="margin-left:10px"></span>
+    <div id="assignedList" style="margin-top:20px"></div>
+  </div>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const campaignId = params.get("id");
+let campaign = null;
+let activeStage = "initial";
+const STAGES = ["initial","v1","v2","v3","v4"];
+const STAGE_LABELS = { initial: "Initial", v1: "Follow-up v1", v2: "Follow-up v2", v3: "Follow-up v3", v4: "Follow-up v4" };
+
+async function loadCampaign() {
+  const r = await fetch(`/api/campaigns/${campaignId}`);
+  if (!r.ok) {
+    document.getElementById("campaignHeader").innerHTML = '<div class="err">Campaign not found.</div>';
+    return;
+  }
+  campaign = await r.json();
+  renderHeader();
+  renderTabs();
+  renderStage(activeStage);
+  renderAttachments();
+}
+
+function renderHeader() {
+  const c = campaign;
+  document.getElementById("campaignHeader").innerHTML = `
+    <h2>Campaign · ${escapeHtml(c.name)} <span class="pill ${c.status}">${c.status}</span></h2>
+    <div class="hint">${escapeHtml(c.description || "(no description)")}</div>
+    <div class="row two" style="margin-top:14px">
+      <div>
+        <label>Sender</label>
+        <div>${escapeHtml(c.sender_id ? "Sender #" + c.sender_id : "?")} · delays: ${c.delay_days_v1}d / ${c.delay_days_v2}d / ${c.delay_days_v3}d / ${c.delay_days_v4}d</div>
+      </div>
+      <div style="text-align:right">
+        <a href="/outbox.html?campaign_id=${c.id}"><button class="secondary small">View Outbox →</button></a>
+      </div>
+    </div>
+  `;
+}
+
+function renderTabs() {
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = STAGES.map(s => {
+    const tpl = campaign.templates.find(t => t.stage === s);
+    const approved = tpl?.approved_at;
+    return `<div class="tab ${s === activeStage ? 'active' : ''}" onclick="switchStage('${s}')">
+              ${STAGE_LABELS[s]}
+              <span class="pill ${approved ? 'approved' : 'unapproved'}">${approved ? '✓' : '○'}</span>
+            </div>`;
+  }).join("");
+}
+
+function switchStage(s) {
+  activeStage = s;
+  renderTabs();
+  renderStage(s);
+}
+
+function renderStage(stage) {
+  const tpl = campaign.templates.find(t => t.stage === stage);
+  const approved = tpl?.approved_at;
+  document.getElementById("stages").innerHTML = `
+    <div class="row">
+      <label>Subject</label>
+      <input id="subject" type="text" value="${escapeAttr(tpl.subject || '')}">
+    </div>
+    <div class="row">
+      <label>Body — use <code>[PERSONALIZED]</code> where Claude should fill personalization</label>
+      <textarea id="body" class="body">${escapeHtml(tpl.body || '')}</textarea>
+    </div>
+    <div class="row">
+      <label>Personalization instructions (the prompt Claude follows when filling [PERSONALIZED])</label>
+      <textarea id="instructions" placeholder="e.g. Write 2-3 sentences referencing the creator's content. Mention a specific theme from their recent videos. Connect it to AshwaMag's stress/sleep angle. Keep it conversational, no compliments.">${escapeHtml(tpl.personalization_instructions || '')}</textarea>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button onclick="saveTemplate(${tpl.id})">💾 Save</button>
+      <button onclick="generateSample(${tpl.id})" class="secondary">🪄 Generate Sample</button>
+      ${approved ? `<button class="danger" onclick="unapprove(${tpl.id})">Unapprove (Edit)</button>`
+                 : `<button onclick="approveTemplate(${tpl.id})">✓ Approve Template</button>`}
+      <span id="saveMsg" class="hint"></span>
+    </div>
+    <div id="samplePreview"></div>
+  `;
+}
+
+async function saveTemplate(tid) {
+  const subject = document.getElementById("subject").value;
+  const body = document.getElementById("body").value;
+  const instructions = document.getElementById("instructions").value;
+  const msg = document.getElementById("saveMsg");
+  msg.textContent = "Saving…";
+  const r = await fetch(`/api/templates/${tid}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject, body, personalization_instructions: instructions }),
+  });
+  if (r.ok) {
+    msg.className = "hint ok";
+    msg.textContent = "Saved · approval reset · regenerate sample";
+    await loadCampaign();
+  } else {
+    msg.className = "hint err";
+    msg.textContent = "Save failed";
+  }
+}
+
+async function generateSample(tid) {
+  const msg = document.getElementById("saveMsg");
+  msg.className = "hint";
+  msg.textContent = "Saving + generating sample (may take 5-10s)…";
+  // Save first
+  await fetch(`/api/templates/${tid}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subject: document.getElementById("subject").value,
+      body: document.getElementById("body").value,
+      personalization_instructions: document.getElementById("instructions").value,
+    }),
+  });
+  try {
+    const r = await fetch(`/api/templates/${tid}/sample`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "sample failed");
+    document.getElementById("samplePreview").innerHTML = `
+      <div class="preview">
+        <div class="preview-meta">SAMPLE generated against @${escapeHtml(d.handle)}</div>
+        <div><strong>Subject:</strong> ${escapeHtml(d.subject)}</div>
+        <div class="preview-body" style="margin-top:10px">${escapeHtml(d.body)}</div>
+        ${d.personalized_content ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+          <div class="hint">Personalized portion that Claude inserted:</div>
+          <div style="color:var(--accent);margin-top:4px">${escapeHtml(d.personalized_content)}</div>
+        </div>` : ''}
+      </div>`;
+    msg.className = "hint ok";
+    msg.textContent = "Sample ready. Approve template when happy.";
+  } catch (e) {
+    msg.className = "hint err";
+    msg.textContent = "Sample failed: " + e.message;
+  }
+}
+
+async function approveTemplate(tid) {
+  await fetch(`/api/templates/${tid}/approve`, { method: "POST" });
+  await loadCampaign();
+}
+
+async function unapprove(tid) {
+  // unapprove == just save again (saving resets approved_at via API)
+  await fetch(`/api/templates/${tid}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject: campaign.templates.find(t=>t.id===tid).subject }),
+  });
+  await loadCampaign();
+}
+
+function renderAttachments() {
+  const list = document.getElementById("attachmentsList");
+  if (!campaign.attachments?.length) {
+    list.innerHTML = '<div class="hint">No attachments uploaded yet.</div>';
+    return;
+  }
+  list.innerHTML = campaign.attachments.map(a => `
+    <div class="attachment">
+      📎 ${escapeHtml(a.filename)} <span style="color:var(--muted)">(${(a.size_bytes/1024).toFixed(0)} KB)</span>
+      <span class="remove" onclick="deleteAttachment(${a.id})">✕</span>
+    </div>`).join("");
+}
+
+async function uploadAttachment() {
+  const f = document.getElementById("attachFile").files[0];
+  const msg = document.getElementById("attachMsg");
+  if (!f) { msg.className="hint err"; msg.textContent="pick a file first"; return; }
+  msg.className = "hint";
+  msg.textContent = "Uploading…";
+  const fd = new FormData();
+  fd.append("file", f);
+  const r = await fetch(`/api/campaigns/${campaignId}/attachments`, { method: "POST", body: fd });
+  if (r.ok) {
+    msg.className = "hint ok"; msg.textContent = "Uploaded";
+    document.getElementById("attachFile").value = "";
+    await loadCampaign();
+  } else {
+    const d = await r.json().catch(() => ({}));
+    msg.className = "hint err"; msg.textContent = "Failed: " + (d.error || r.status);
+  }
+}
+
+async function deleteAttachment(id) {
+  await fetch(`/api/attachments/${id}`, { method: "DELETE" });
+  await loadCampaign();
+}
+
+async function loadJobs() {
+  const r = await fetch("/api/jobs");
+  const d = await r.json();
+  const sel = document.getElementById("fromJob");
+  sel.innerHTML = '<option value="">— Pick a job —</option>' +
+    (d.jobs || []).map(j => `<option value="${j.id}">#${j.id} ${escapeHtml(j.name || j.description?.slice(0,60) || '?')} (${j.matched_count} matched)</option>`).join("");
+}
+
+async function assignCreators() {
+  const fromJob = document.getElementById("fromJob").value;
+  const cueRaw = document.getElementById("cueFilter").value;
+  const manual = document.getElementById("manualHandles").value.trim();
+  const msg = document.getElementById("assignMsg");
+  msg.className = "hint";
+  msg.textContent = "Assigning…";
+  let body;
+  if (manual) {
+    const handles = manual.split(/[\s,]+/).map(s => s.replace(/^@/, "").toLowerCase()).filter(Boolean);
+    body = { handles };
+  } else if (fromJob) {
+    body = { from_job_id: parseInt(fromJob, 10) };
+    if (cueRaw) body.cue_filter = cueRaw.split(",").map(s => s.trim()).filter(Boolean);
+  } else {
+    msg.className = "hint err";
+    msg.textContent = "pick a job or paste handles";
+    return;
+  }
+  const r = await fetch(`/api/campaigns/${campaignId}/assign`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    msg.className = "hint ok";
+    msg.textContent = `Assigned ${d.assigned}, skipped ${d.skipped}.`;
+    document.getElementById("manualHandles").value = "";
+    loadAssignedCreators();
+  } else {
+    msg.className = "hint err"; msg.textContent = d.error || "failed";
+  }
+}
+
+async function loadAssignedCreators() {
+  const r = await fetch(`/api/campaigns/${campaignId}/creators`);
+  const d = await r.json();
+  const list = document.getElementById("assignedList");
+  if (!d.creators?.length) {
+    list.innerHTML = '<div class="hint" style="margin-top:14px">No creators assigned yet.</div>';
+    return;
+  }
+  list.innerHTML = `
+    <table><thead><tr><th>Handle</th><th>Email</th><th>Stage</th><th>Status</th><th>Next Send</th><th>Sent</th></tr></thead>
+    <tbody>${d.creators.map(c => `
+      <tr>
+        <td>@${escapeHtml(c.handle)}</td>
+        <td>${escapeHtml(c.to_email)}</td>
+        <td>${escapeHtml(c.current_stage)}</td>
+        <td><span class="pill ${c.status === 'active' ? 'approved' : 'unapproved'}">${escapeHtml(c.status)}</span></td>
+        <td>${c.next_send_at ? new Date(c.next_send_at).toLocaleString() : '—'}</td>
+        <td>${c.sent_count}</td>
+      </tr>`).join("")}</tbody></table>`;
+}
+
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
+
+loadCampaign();
+loadJobs();
+loadAssignedCreators();
+</script>
+</body>
+</html>

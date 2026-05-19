@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Creator Scraper</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --border:#2a313c; --text:#e6edf3;
+    --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'SF Pro',system-ui,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  nav a { color:var(--muted); margin-left:18px; text-decoration:none; font-size:13px; }
+  nav a:hover, nav a.active { color:var(--text); }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+           padding:20px; margin-bottom:20px; }
+  .panel h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--muted);
+              text-transform:uppercase; letter-spacing:.05em; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500; }
+  input[type=text], textarea, input[type=file] {
+    width:100%; background:#0d1117; border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:10px 12px; font:inherit; font-family:inherit;
+  }
+  textarea { min-height:80px; resize:vertical; font-family:inherit; }
+  .row { display:grid; gap:14px; margin-bottom:14px; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+  button { background:var(--accent); color:#0d1117; border:none; padding:9px 16px;
+           border-radius:6px; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  tr:hover td { background:rgba(255,255,255,.02); }
+  a { color:var(--accent); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+  .pill.running { background:rgba(88,166,255,.15); color:var(--accent); }
+  .pill.done { background:rgba(63,185,80,.15); color:var(--green); }
+  .pill.failed, .pill.cancelled { background:rgba(248,81,73,.15); color:var(--red); }
+  .pill.pending { background:rgba(210,153,34,.15); color:var(--amber); }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .count { font-variant-numeric:tabular-nums; color:var(--muted); }
+  .empty { color:var(--muted); padding:40px 20px; text-align:center; }
+  .ok { color:var(--green); }
+  .err { color:var(--red); margin-top:8px; font-size:13px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; padding:4px 0; }
+  details summary:hover { color:var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Creator Scraper</h1>
+  <nav>
+    <a href="/" class="active">Jobs</a>
+    <a href="/creators.html">CRM</a>
+    <a href="/campaigns.html">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h2>New Scrape Job</h2>
+    <form id="jobForm">
+      <div class="row two">
+        <div>
+          <label>Job name (optional)</label>
+          <input name="name" type="text" placeholder="e.g. April nurse-creators sweep">
+        </div>
+        <div>
+          <label>Handles file (one per line, or CSV)</label>
+          <input name="handles_file" type="file" accept=".csv,.txt,.tsv">
+        </div>
+      </div>
+      <div class="row">
+        <label>Or paste handles (newline / comma / space separated) — up to 50,000</label>
+        <textarea name="handles" placeholder="@somebody&#10;@another&#10;another_one"></textarea>
+        <div class="hint">@ symbols and tiktok.com/ URLs are fine; they will be cleaned.</div>
+      </div>
+      <div class="row">
+        <label>Describe the type of creators you are looking for</label>
+        <textarea name="description" required placeholder="Example: Registered nurses or nurse practitioners actively practicing in the US, posting health education content. NOT general wellness influencers. NOT supplement affiliates without credentials."></textarea>
+        <div class="hint">Claude reads each bio and decides match / no-match against this description.</div>
+      </div>
+      <details>
+        <summary>Optional: structured rubric (per-dimension scoring)</summary>
+        <div style="margin-top:8px">
+          <label>Rubric (JSON object: dimension name to short definition)</label>
+          <textarea name="rubric" placeholder='{
+  "credentials": "Bio mentions verifiable medical credential (RN, NP, MD, PharmD, etc.)",
+  "audience_fit": "Bio language / hashtags suggest US health-conscious audience",
+  "authority_signals": "Bio references clinical practice, hospital affiliation, or specialty",
+  "content_style": "Bio implies educational rather than affiliate-style content"
+}' style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-height:140px"></textarea>
+          <div class="hint">Each dimension is scored 0 to 5 alongside the match verdict. Leave blank to skip.</div>
+        </div>
+      </details>
+      <div class="row" style="margin-top:14px;background:rgba(88,166,255,.05);padding:12px;border-radius:6px;border:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;color:var(--text)">
+          <input type="checkbox" name="enable_visual" value="on" style="width:auto" onchange="updateEstimate()">
+          <strong>Visual screenshot verification</strong>
+        </label>
+        <div class="hint">Headless browser loads each profile, takes 2 screenshots, runs them through GPT-4o-mini vision against your description. Catches things bios miss like "wearing scrubs", "visibly pregnant", "bald". Adds ~$0.0008/creator.</div>
+      </div>
+
+      <div class="row" style="margin-top:8px;background:rgba(88,166,255,.05);padding:12px;border-radius:6px;border:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;color:var(--text)">
+          <input type="checkbox" name="enable_transcripts" value="on" style="width:auto" id="enableTranscripts" onchange="updateEstimate()">
+          <strong>Transcript matching (Whisper)</strong>
+        </label>
+        <div class="hint">Pulls 5 recent videos per creator via Apify, filters to those matching the hashtags below, downloads + transcribes via OpenAI Whisper. Transcripts feed into the match decision AND get saved for writing personalised outreach later. Adds roughly $0.005/creator.</div>
+        <div id="transcriptOpts" style="display:none;margin-top:10px">
+          <label style="font-size:12px">Relevant hashtags (comma or space separated, no #). Claude will add related ones automatically.</label>
+          <input type="text" name="hashtags" placeholder="nurse, RN, scrublife, icunurse" oninput="updateEstimate()">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <label>Cost cap (USD) — job auto-pauses if total spend reaches this</label>
+        <input type="number" name="cost_cap_usd" value="10" step="0.50" min="0.50" max="1000" style="max-width:160px" oninput="updateEstimate()">
+        <div class="hint" id="costEstimate" style="margin-top:6px">Estimated cost: $0.00 for 0 creators. Adjust the cap above to be at least this much.</div>
+      </div>
+      <div style="margin-top:14px">
+        <button type="submit" id="submitBtn">Start job</button>
+        <span id="submitMsg" class="hint" style="margin-left:12px"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Recent jobs</h2>
+    <table id="jobsTable">
+      <thead><tr>
+        <th>ID</th><th>Name</th><th>Status</th><th>Scraped</th><th>Evaluated</th><th>Matched</th><th>Created</th>
+      </tr></thead>
+      <tbody><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const form = document.getElementById("jobForm");
+const submitBtn = document.getElementById("submitBtn");
+const submitMsg = document.getElementById("submitMsg");
+
+// Reveal hashtag input when transcripts toggle is on
+const trToggle = document.getElementById("enableTranscripts");
+trToggle.addEventListener("change", () => {
+  document.getElementById("transcriptOpts").style.display = trToggle.checked ? "block" : "none";
+});
+
+// Count handles in the textarea + file to drive the cost estimate
+function countHandles() {
+  const raw = form.elements.handles.value || "";
+  const tokens = raw.split(/[\s,]+/).filter((t) => t.trim().length >= 2);
+  return tokens.length;
+}
+
+let estimateTimer = null;
+async function updateEstimate() {
+  if (estimateTimer) clearTimeout(estimateTimer);
+  estimateTimer = setTimeout(async () => {
+    const total = countHandles();
+    const hashtags = (form.elements.hashtags?.value || "").split(/[,\s]+/).map(s => s.trim().replace(/^#+/, '')).filter(Boolean);
+    const body = {
+      total_creators: total,
+      enable_visual: form.elements.enable_visual.checked,
+      enable_transcripts: form.elements.enable_transcripts.checked,
+      hashtags,
+    };
+    try {
+      const r = await fetch("/api/cost-estimate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      const cap = Number(form.elements.cost_cap_usd.value) || 0;
+      const usd = d.estimated_usd || 0;
+      const note = cap > 0 && usd > cap
+        ? `<span style="color:var(--amber)">⚠ Estimated cost ($${usd.toFixed(2)}) exceeds cap ($${cap.toFixed(2)}). Job will auto-pause around the cap.</span>`
+        : `Estimated cost: <strong>$${usd.toFixed(2)}</strong> for ${total.toLocaleString()} creators. Cap: $${cap.toFixed(2)}.`;
+      document.getElementById("costEstimate").innerHTML = note;
+    } catch {}
+  }, 250);
+}
+
+// Recompute on textarea changes
+form.elements.handles.addEventListener("input", updateEstimate);
+updateEstimate();
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  submitBtn.disabled = true;
+  submitMsg.textContent = "Submitting…";
+  submitMsg.className = "hint";
+
+  const rubricRaw = form.elements.rubric.value.trim();
+  if (rubricRaw) {
+    try { JSON.parse(rubricRaw); } catch (err) {
+      submitMsg.className = "err";
+      submitMsg.textContent = "Rubric is not valid JSON: " + err.message;
+      submitBtn.disabled = false;
+      return;
+    }
+  }
+
+  const fd = new FormData(form);
+  try {
+    const r = await fetch("/api/jobs", { method:"POST", body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "failed");
+    submitMsg.className = "ok";
+    const parts = [`Job #${data.id} started with ${data.total_creators} creators`];
+    if (data.has_rubric) parts.push("rubric");
+    if (data.enable_visual) parts.push("visual");
+    if (data.enable_transcripts) parts.push(`transcripts (${(data.hashtags||[]).length} tags)`);
+    parts.push(`cap $${Number(data.cost_cap_usd).toFixed(2)}`);
+    submitMsg.textContent = parts.join(" · ");
+    setTimeout(() => location.href = `/job.html?id=${data.id}`, 800);
+  } catch (err) {
+    submitMsg.className = "err";
+    submitMsg.textContent = "Error: " + err.message;
+    submitBtn.disabled = false;
+  }
+};
+
+async function loadJobs() {
+  const r = await fetch("/api/jobs");
+  const { jobs } = await r.json();
+  const tbody = document.querySelector("#jobsTable tbody");
+  if (!jobs.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No jobs yet. Create one above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = jobs.map(j => {
+    const created = new Date(j.created_at).toLocaleString();
+    const pct = j.total_creators ? Math.round(j.scraped_count/j.total_creators*100) : 0;
+    return `<tr>
+      <td><a href="/job.html?id=${j.id}">#${j.id}</a></td>
+      <td>${escapeHtml(j.name || j.description.slice(0,60))}${j.rubric ? ' <span class="hint">rubric</span>' : ''}</td>
+      <td><span class="pill ${j.status}">${j.status}</span></td>
+      <td class="count">${j.scraped_count} / ${j.total_creators} (${pct}%)</td>
+      <td class="count">${j.evaluated_count}</td>
+      <td class="count ok">${j.matched_count}</td>
+      <td class="count">${created}</td>
+    </tr>`;
+  }).join("");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+loadJobs();
+setInterval(loadJobs, 5000);
+</script>
+</body>
+</html>

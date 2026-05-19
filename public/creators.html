@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CRM</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1>CRM</h1>
+  <nav>
+    <a href="/">Jobs</a>
+    <a href="/creators.html" class="active">CRM</a>
+    <a href="/campaigns.html">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end">
+      <div><label>Search</label><input id="q" type="search" placeholder="handle, nickname, or bio text"></div>
+      <div><label>CRM status</label>
+        <select id="status">
+          <option value="">Any</option>
+          <option value="new">new</option>
+          <option value="shortlisted">shortlisted</option>
+          <option value="contacted">contacted</option>
+          <option value="responded">responded</option>
+          <option value="signed">signed</option>
+          <option value="rejected">rejected</option>
+          <option value="dnc">dnc</option>
+        </select>
+      </div>
+      <div><label>Tag</label><input id="tag" type="text" placeholder="e.g. priority"></div>
+      <div><label>&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:normal">
+          <input type="checkbox" id="hasEmail"> has email
+        </label>
+      </div>
+      <button id="apply">Filter</button>
+    </div>
+    <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+      <span class="hint" id="count"></span>
+      <a id="csvLink" href="/api/export.csv" class="btnlink" style="font-size:13px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:6px">Export filtered CSV</a>
+    </div>
+  </div>
+
+  <div class="panel">
+    <table id="t">
+      <thead><tr>
+        <th>Handle</th><th>Bio</th><th>Followers</th><th>Emails</th><th>Phones</th>
+        <th>Status</th><th>Tags</th><th></th>
+      </tr></thead>
+      <tbody><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Detail drawer -->
+<div id="drawer" style="position:fixed;top:0;right:0;width:480px;height:100vh;background:var(--panel);
+                       border-left:1px solid var(--border);padding:24px;overflow-y:auto;display:none;z-index:10">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 id="drawerHandle" style="margin:0">@…</h2>
+    <button class="secondary" onclick="closeDrawer()">✕</button>
+  </div>
+  <div id="drawerBody"></div>
+</div>
+
+<style>
+  .bio { max-width:340px; color:var(--muted); font-size:12px;
+         display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .tagchip { display:inline-block; padding:2px 8px; margin:1px 2px; background:rgba(88,166,255,.1);
+             color:var(--accent); border-radius:10px; font-size:11px; }
+  .ctcrow { padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .ctcrow .k { color:var(--muted); font-size:11px; text-transform:uppercase; }
+  .scorerow { display:inline-block; padding:2px 8px; margin:2px; background:rgba(63,185,80,.1);
+              color:var(--green); border-radius:10px; font-size:11px; font-variant-numeric:tabular-nums; }
+  .linkfetch { font-size:11px; color:var(--muted); padding:4px 0; }
+</style>
+
+<script>
+const q = document.getElementById("q");
+const status = document.getElementById("status");
+const tag = document.getElementById("tag");
+const hasEmail = document.getElementById("hasEmail");
+
+document.getElementById("apply").onclick = load;
+[q, status, tag, hasEmail].forEach(el => el.addEventListener("change", load));
+q.addEventListener("keydown", e => { if (e.key === "Enter") load(); });
+
+function queryParams() {
+  const p = new URLSearchParams();
+  if (q.value) p.set("q", q.value);
+  if (status.value) p.set("status", status.value);
+  if (tag.value) p.set("tag", tag.value);
+  if (hasEmail.checked) p.set("has_email", "true");
+  return p;
+}
+
+async function load() {
+  const p = queryParams();
+  p.set("limit", "300");
+  const r = await fetch("/api/creators?" + p);
+  const { creators } = await r.json();
+  document.getElementById("csvLink").href = "/api/export.csv?" + queryParams();
+  document.getElementById("count").textContent = `${creators.length} creator${creators.length===1?'':'s'}`;
+  const tbody = document.querySelector("#t tbody");
+  if (!creators.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No creators match.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = creators.map(c => `
+    <tr>
+      <td><a href="https://www.tiktok.com/@${c.handle}" target="_blank">@${escapeHtml(c.handle)}</a></td>
+      <td class="bio">${escapeHtml(c.bio || '')}</td>
+      <td class="count">${c.follower_count ?? ''}</td>
+      <td class="count">${c.email_count}</td>
+      <td class="count">${c.phone_count}</td>
+      <td><span class="pill ${c.crm_status || 'new'}">${c.crm_status || 'new'}</span></td>
+      <td>${(c.tags || []).map(t => `<span class="tagchip">${escapeHtml(t)}</span>`).join('')}</td>
+      <td><button class="secondary" onclick="openDrawer('${c.handle}')">Open</button></td>
+    </tr>
+  `).join("");
+}
+
+let currentHandle = null;
+async function openDrawer(handle) {
+  currentHandle = handle;
+  document.getElementById("drawer").style.display = "block";
+  document.getElementById("drawerHandle").textContent = "@" + handle;
+  document.getElementById("drawerBody").innerHTML = "Loading…";
+  const r = await fetch("/api/creators/" + handle);
+  const d = await r.json();
+  const c = d.creator, crm = d.crm || {};
+  const tagsHtml = d.tags.map(t => `<span class="tagchip">${escapeHtml(t)} <a href="#" onclick="removeTag('${t}');return false" style="color:var(--red);text-decoration:none">×</a></span>`).join('');
+  const contactsHtml = d.contacts.map(ct => `<div class="ctcrow"><span class="k">${ct.kind}</span> · ${escapeHtml(ct.value)} <span class="hint">(${ct.source})</span></div>`).join('') || '<div class="hint">No contacts found.</div>';
+  const notesHtml = d.notes.map(n => `<div class="ctcrow">${escapeHtml(n.note)}<div class="hint">${n.author || ''} · ${new Date(n.created_at).toLocaleString()}</div></div>`).join('') || '<div class="hint">No notes.</div>';
+  const jobsHtml = d.jobs.map(j => {
+    const scores = j.rubric_scores && typeof j.rubric_scores === "object"
+      ? Object.entries(j.rubric_scores).map(([k,v]) => `<span class="scorerow">${escapeHtml(k)}: ${v}</span>`).join('')
+      : '';
+    return `<div class="ctcrow"><a href="/job.html?id=${j.job_id}">Job #${j.job_id}</a> · ${j.matched === true ? '<span class="ok">matched</span>' : j.matched === false ? 'rejected' : 'pending'} · <span class="hint">${escapeHtml(j.reason || '')}</span>${scores ? '<div style="margin-top:4px">' + scores + '</div>' : ''}</div>`;
+  }).join('') || '<div class="hint">Not in any jobs.</div>';
+
+  const linksHtml = (d.link_fetches || []).map(lf => `<div class="linkfetch">${escapeHtml(lf.url)} · ${lf.status}${lf.http_status ? ` (${lf.http_status})` : ''}${lf.contacts_found ? ` · ${lf.contacts_found} contacts found` : ''}${lf.error ? ` · <span class="err">${escapeHtml(lf.error)}</span>` : ''}</div>`).join('');
+
+  document.getElementById("drawerBody").innerHTML = `
+    <div style="margin-bottom:18px">
+      <div class="hint">${escapeHtml(c.nickname || '')} · ${c.follower_count ?? '?'} followers · ${c.region || ''}</div>
+      <p style="white-space:pre-wrap;font-size:13px">${escapeHtml(c.bio || '(no bio)')}</p>
+      ${c.bio_link ? `<a href="${c.bio_link}" target="_blank">${escapeHtml(c.bio_link)}</a>` : ''}
+    </div>
+
+    <h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;margin:14px 0 8px">CRM</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <select id="crmStatus">
+        ${['new','shortlisted','contacted','responded','signed','rejected','dnc'].map(s =>
+          `<option ${s===(crm.status||'new')?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <input id="crmOwner" type="text" placeholder="owner" value="${escapeHtml(crm.owner || '')}">
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+      <button onclick="saveCrm()">Save CRM</button>
+      ${crm.owner ? '<a href="#" onclick="clearOwner();return false" style="font-size:12px">Clear owner</a>' : ''}
+    </div>
+
+    <h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;margin:18px 0 8px">Tags</h3>
+    <div>${tagsHtml}</div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="newTag" type="text" placeholder="add tag" style="flex:1">
+      <button class="secondary" onclick="addTag()">+</button>
+    </div>
+
+    <h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;margin:18px 0 8px">Contacts (${d.contacts.length})</h3>
+    ${contactsHtml}
+
+    ${linksHtml ? `<h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;margin:18px 0 8px">Bio link fetches</h3>${linksHtml}` : ''}
+
+    <h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;margin:18px 0 8px">Notes</h3>
+    ${notesHtml}
+    <textarea id="newNote" placeholder="add a note…" style="margin-top:8px"></textarea>
+    <button class="secondary" style="margin-top:6px" onclick="addNote()">Add note</button>
+
+    <h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;margin:18px 0 8px">Job history</h3>
+    ${jobsHtml}
+  `;
+}
+
+function closeDrawer() { document.getElementById("drawer").style.display = "none"; currentHandle = null; }
+
+async function saveCrm() {
+  // Only send fields the user actually edited. Empty owner means "leave unchanged"
+  // here; explicit clearing is done via the "Clear owner" link.
+  const body = { status: document.getElementById("crmStatus").value };
+  const owner = document.getElementById("crmOwner").value;
+  if (owner) body.owner = owner;
+  await fetch("/api/creators/" + currentHandle, {
+    method:"PATCH",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify(body),
+  });
+  load();
+  openDrawer(currentHandle);
+}
+
+async function clearOwner() {
+  await fetch("/api/creators/" + currentHandle, {
+    method:"PATCH",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({ owner: { __clear: true } }),
+  });
+  openDrawer(currentHandle);
+}
+
+async function addTag() {
+  const t = document.getElementById("newTag").value.trim();
+  if (!t) return;
+  await fetch(`/api/creators/${currentHandle}/tags`, {
+    method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ tag: t })
+  });
+  openDrawer(currentHandle);
+}
+
+async function removeTag(t) {
+  await fetch(`/api/creators/${currentHandle}/tags/${encodeURIComponent(t)}`, { method:"DELETE" });
+  openDrawer(currentHandle);
+}
+
+async function addNote() {
+  const n = document.getElementById("newNote").value.trim();
+  if (!n) return;
+  await fetch(`/api/creators/${currentHandle}/notes`, {
+    method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ note: n })
+  });
+  openDrawer(currentHandle);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+load();
+</script>
+</body>
+</html>

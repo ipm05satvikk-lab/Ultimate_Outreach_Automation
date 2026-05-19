@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Job</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1><a href="/" style="color:inherit;text-decoration:none">← Jobs</a> · Job <span id="jobId"></span></h1>
+  <nav>
+    <a href="/">Jobs</a>
+    <a href="/creators.html">CRM</a>
+    <a href="/campaigns.html">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div class="panel" id="summary">Loading…</div>
+
+  <div class="panel">
+    <h2 style="display:flex;align-items:center;gap:12px">
+      Results
+      <span class="toolbar">
+        <button class="secondary" data-filter="">All</button>
+        <button class="secondary" data-filter="true">Matched</button>
+        <button class="secondary" data-filter="false">Rejected</button>
+      </span>
+      <span style="margin-left:auto;display:flex;gap:8px">
+        <a id="csvAll" class="btnlink" href="#">Export CSV</a>
+        <a id="csvMatched" class="btnlink" href="#">Export matched</a>
+      </span>
+    </h2>
+    <table id="resultsTable">
+      <thead><tr>
+        <th>Handle</th><th>Match</th><th>Source(s)</th><th>Cues</th><th>Conf</th><th>Reason</th><th>Followers</th>
+      </tr></thead>
+      <tbody><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div style="margin-top:12px;text-align:center">
+      <button id="loadMore" class="secondary">Load more</button>
+    </div>
+  </div>
+</main>
+
+<style>
+  .toolbar button { margin-right:4px; padding:4px 10px; font-size:12px; }
+  .toolbar button.active { background:var(--accent); color:#0d1117; border-color:var(--accent); }
+  .btnlink { color:var(--accent); text-decoration:none; font-size:13px; padding:6px 10px;
+             border:1px solid var(--border); border-radius:6px; }
+  .btnlink:hover { background:rgba(255,255,255,.04); }
+  .bio { max-width:340px; color:var(--muted); font-size:12px;
+         display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .reason { max-width:240px; font-size:12px; color:var(--muted); }
+  .cues { max-width:200px; font-size:11px; color:var(--muted); }
+  .cuechip { display:inline-block; padding:1px 6px; margin:1px 2px;
+             background:rgba(63,185,80,.1); color:var(--green); border-radius:8px; font-size:10px; }
+  .match-yes { color:var(--green); font-weight:600; }
+  .match-no { color:var(--red); }
+
+  /* Stage progress block */
+  .stage { display:grid; grid-template-columns: 90px 1fr auto; align-items:center; gap:12px; margin-bottom:10px; }
+  .stage .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stage .barwrap { background:#0d1117; border-radius:4px; height:18px; overflow:hidden;
+                    border:1px solid var(--border); position:relative; }
+  .stage .bar-done { background:var(--green); height:100%; position:absolute; left:0; top:0; transition:width .3s; }
+  .stage .bar-inflight { background:var(--accent); height:100%; position:absolute; top:0; transition: left .3s, width .3s; opacity:.7; }
+  .stage .bar-failed { background:var(--red); height:100%; position:absolute; top:0; transition: left .3s, width .3s; opacity:.85; }
+  .stage .counts { font-size:11px; color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .stage .counts .num { color:var(--text); }
+  .stage .counts .ok { color:var(--green); }
+  .stage .counts .warn { color:var(--amber); }
+  .stage .counts .err { color:var(--red); }
+
+  .actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .actions button { padding:6px 14px; font-size:13px; }
+  .actions button.danger { background:transparent; color:var(--red); border:1px solid var(--red); }
+  .actions button.danger:hover { background:rgba(248,81,73,.1); }
+
+  .badges { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .badge { padding:2px 8px; border-radius:10px; font-size:11px;
+           background:rgba(255,255,255,.06); color:var(--muted); border:1px solid var(--border); }
+  .badge.on { background:rgba(63,185,80,.12); color:var(--green); border-color:rgba(63,185,80,.3); }
+
+  .stat { display:inline-block; margin-right:24px; }
+  .stat .label { color:var(--muted); font-size:12px; }
+  .stat .value { font-size:18px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .stat .value.ok { color:var(--green); }
+</style>
+
+<script>
+const params = new URLSearchParams(location.search);
+const jobId = params.get("id");
+document.getElementById("jobId").textContent = "#" + jobId;
+
+let filter = "";
+let offset = 0;
+const limit = 100;
+let endReached = false;
+
+document.querySelectorAll(".toolbar button").forEach(b => {
+  b.onclick = () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll(".toolbar button").forEach(x => x.classList.toggle("active", x === b));
+    offset = 0; endReached = false;
+    document.querySelector("#resultsTable tbody").innerHTML = "";
+    loadResults();
+  };
+});
+document.querySelector('.toolbar button[data-filter=""]').classList.add("active");
+
+document.getElementById("csvAll").href = `/api/export.csv?job=${jobId}`;
+document.getElementById("csvMatched").href = `/api/export.csv?job=${jobId}&matched=true`;
+
+function pct(n, total) {
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, (Number(n) / Number(total)) * 100));
+}
+
+function renderStage(label, counts, total, enabled) {
+  if (!enabled) {
+    return `<div class="stage">
+      <div class="label">${label}</div>
+      <div class="barwrap"></div>
+      <div class="counts" style="color:var(--muted)">disabled</div>
+    </div>`;
+  }
+  const done = Number(counts.done) || 0;
+  const inflight = Number(counts.in_flight) || 0;
+  const failed = Number(counts.failed) || 0;
+  const skipped = Number(counts.skipped) || 0;
+  const pending = Number(counts.pending) || 0;
+  const donePct = pct(done, total);
+  const failPct = pct(failed, total);
+  const inflightPct = pct(inflight, total);
+  return `<div class="stage">
+    <div class="label">${label}</div>
+    <div class="barwrap">
+      <div class="bar-done" style="width:${donePct}%"></div>
+      <div class="bar-failed" style="left:${donePct}%;width:${failPct}%"></div>
+      <div class="bar-inflight" style="left:${donePct+failPct}%;width:${inflightPct}%"></div>
+    </div>
+    <div class="counts">
+      <span class="num ok">${done.toLocaleString()}</span> done
+      ${inflight ? ' · <span class="num">'+inflight+'</span> in flight' : ''}
+      ${pending ? ' · <span class="num warn">'+pending.toLocaleString()+'</span> pending' : ''}
+      ${failed ? ' · <span class="num err">'+failed+'</span> failed' : ''}
+      ${skipped ? ' · <span class="num">'+skipped+'</span> skipped' : ''}
+    </div>
+  </div>`;
+}
+
+async function loadSummary() {
+  const r = await fetch(`/api/jobs/${jobId}`);
+  const j = await r.json();
+  const c = j.counts || {};
+  const total = Number(c.total) || j.total_creators || 0;
+
+  const visualEnabled = !!j.enable_visual;
+  const transcriptsEnabled = !!j.enable_transcripts;
+  const costSpent = Number(j.cost_spent_usd || 0);
+  const costCap = Number(j.cost_cap_usd || 0);
+  const costPct = costCap > 0 ? Math.min(100, (costSpent / costCap) * 100) : 0;
+  const isPausedByCost = j.status === 'paused' && j.cost_paused_at;
+
+  const actions = j.status === 'running'
+    ? `<button class="secondary" onclick="pauseJob()">⏸ Pause</button>
+       <button class="danger" onclick="cancelJob()">Cancel</button>`
+    : j.status === 'paused'
+    ? `<button onclick="resumeJob()">▶ Resume</button>
+       <button class="danger" onclick="cancelJob()">Cancel</button>`
+    : '';
+
+  const capBlock = isPausedByCost ? `
+    <div style="margin-top:14px;background:rgba(210,153,34,.08);border:1px solid rgba(210,153,34,.4);padding:14px;border-radius:6px">
+      <div style="color:var(--amber);font-weight:600;margin-bottom:6px">⚠ Cost cap reached — job auto-paused</div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:10px">Spent <strong style="color:var(--text)">$${costSpent.toFixed(4)}</strong> of <strong style="color:var(--text)">$${costCap.toFixed(2)}</strong>. ${j.error || ''}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--muted);font-size:12px">Raise cap to:</span>
+        <input type="number" id="newCapInput" step="0.50" min="${(costSpent+0.01).toFixed(2)}" value="${(costSpent + (costCap - costSpent) + 5).toFixed(2)}" style="max-width:120px;padding:6px 8px;background:#0d1117;border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <button onclick="raiseCap()">Raise &amp; Resume</button>
+        <button class="secondary" onclick="cancelJob()">Cancel instead</button>
+      </div>
+    </div>` : '';
+
+  document.getElementById("summary").innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px">
+      <div style="flex:1">
+        <h2 style="margin-bottom:8px">${escapeHtml(j.name || "Untitled")} · <span class="pill ${j.status}">${j.status}</span></h2>
+        <div style="color:var(--muted);font-size:13px;margin-bottom:8px;white-space:pre-wrap">${escapeHtml(j.description)}</div>
+        <div class="badges">
+          <span class="badge on">Bio scrape</span>
+          ${j.rubric ? '<span class="badge on">Rubric</span>' : ''}
+          <span class="badge ${visualEnabled ? 'on' : ''}">Visual ${visualEnabled ? 'on' : 'off'}</span>
+          <span class="badge ${transcriptsEnabled ? 'on' : ''}">Transcripts ${transcriptsEnabled ? 'on' : 'off'}</span>
+          <span class="badge on">Linktree (auto)</span>
+          ${Array.isArray(j.relevant_hashtags) && j.relevant_hashtags.length ? `<span class="badge">#${j.relevant_hashtags.slice(0,5).join(' #')}${j.relevant_hashtags.length>5?'…':''}</span>` : ''}
+        </div>
+      </div>
+      <div class="actions">${actions}</div>
+    </div>
+
+    <div style="background:rgba(255,255,255,.02);padding:14px;border-radius:6px;border:1px solid var(--border)">
+      ${renderStage('Scrape', { done: c.scrape_done, in_flight: c.scrape_in_flight, failed: c.scrape_failed, skipped: c.scrape_skipped, pending: c.scrape_pending }, total, true)}
+      ${renderStage('Visual', { done: c.visual_done, in_flight: c.visual_in_flight, failed: c.visual_failed, skipped: c.visual_skipped, pending: c.visual_pending }, total, visualEnabled)}
+      ${renderStage('Transcript', { done: c.transcript_done, in_flight: c.transcript_in_flight, failed: c.transcript_failed, skipped: c.transcript_skipped, pending: c.transcript_pending }, total, transcriptsEnabled)}
+      ${renderStage('Evaluate', { done: c.eval_done, in_flight: c.eval_in_flight, failed: c.eval_failed, skipped: c.eval_skipped, pending: c.eval_pending }, total, true)}
+    </div>
+
+    <div style="margin-top:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span class="stat"><span class="label">Total</span> <span class="value">${total.toLocaleString()}</span></span>
+      <span class="stat"><span class="label">Matched</span> <span class="value ok">${Number(c.matched || 0).toLocaleString()}</span></span>
+      <span class="stat"><span class="label">Rejected</span> <span class="value">${Number(c.rejected || 0).toLocaleString()}</span></span>
+      <div style="margin-left:auto;min-width:280px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+          <span>Spend</span>
+          <span class="${costPct > 90 ? 'err' : costPct > 70 ? 'warn' : ''}" style="font-variant-numeric:tabular-nums">$${costSpent.toFixed(4)} / $${costCap.toFixed(2)}</span>
+        </div>
+        <div class="barwrap" style="height:8px;background:#0d1117;border:1px solid var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${costPct}%;background:${costPct > 90 ? 'var(--red)' : costPct > 70 ? 'var(--amber)' : 'var(--green)'};transition:width .3s"></div>
+        </div>
+      </div>
+    </div>
+
+    ${capBlock}`;
+}
+
+async function pauseJob() {
+  await fetch(`/api/jobs/${jobId}/pause`, { method:"POST" });
+  loadSummary();
+}
+async function resumeJob() {
+  await fetch(`/api/jobs/${jobId}/resume`, { method:"POST" });
+  loadSummary();
+}
+async function cancelJob() {
+  if (!confirm("Cancel this job? Already-done work stays saved, but pending creators will not be scraped. This cannot be undone.")) return;
+  await fetch(`/api/jobs/${jobId}/cancel`, { method:"POST" });
+  loadSummary();
+}
+async function raiseCap() {
+  const v = Number(document.getElementById("newCapInput").value);
+  if (!Number.isFinite(v) || v <= 0) { alert("Enter a valid new cap"); return; }
+  await fetch(`/api/jobs/${jobId}/raise-cap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_cap_usd: v }),
+  });
+  loadSummary();
+}
+
+async function loadResults() {
+  if (endReached) return;
+  const url = `/api/jobs/${jobId}/results?limit=${limit}&offset=${offset}` + (filter ? `&matched=${filter}` : "");
+  const r = await fetch(url);
+  const { results } = await r.json();
+  const tbody = document.querySelector("#resultsTable tbody");
+  if (offset === 0) tbody.innerHTML = "";
+  if (!results.length) {
+    endReached = true;
+    if (offset === 0) tbody.innerHTML = '<tr><td colspan="7" class="empty">No results yet. The workers are processing in the background — this page auto-refreshes every 2 seconds.</td></tr>';
+    return;
+  }
+  for (const c of results) {
+    const tr = document.createElement("tr");
+    const sources = Array.isArray(c.match_sources) && c.match_sources.length
+      ? c.match_sources.map(s => `<span class="cuechip">${s}</span>`).join('')
+      : c.matched === false ? '<span style="color:var(--muted)">-</span>' : '';
+    const cues = Array.isArray(c.match_cues) && c.match_cues.length
+      ? c.match_cues.slice(0, 6).map(x => `<span class="cuechip">${escapeHtml(x)}</span>`).join('')
+      : '';
+    tr.innerHTML = `
+      <td><a href="https://www.tiktok.com/@${c.handle}" target="_blank">@${escapeHtml(c.handle)}</a></td>
+      <td>${c.matched === true ? '<span class="match-yes">✓ yes</span>' : c.matched === false ? '<span class="match-no">no</span>' : '<span style="color:var(--muted)">…</span>'}</td>
+      <td>${sources}</td>
+      <td class="cues">${cues}</td>
+      <td>${c.confidence != null ? Number(c.confidence).toFixed(2) : ''}</td>
+      <td class="reason">${escapeHtml(c.reason || '')}</td>
+      <td class="count">${c.follower_count ?? ''}</td>`;
+    tbody.appendChild(tr);
+  }
+  offset += results.length;
+  if (results.length < limit) endReached = true;
+}
+
+document.getElementById("loadMore").onclick = loadResults;
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+loadSummary();
+loadResults();
+// Real-time refresh: every 2 seconds. Past the first page we don't re-pull —
+// scroll back to top to see updates.
+setInterval(() => {
+  loadSummary();
+  if (offset <= limit) { offset = 0; endReached = false; loadResults(); }
+}, 2000);
+</script>
+</body>
+</html>

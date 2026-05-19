@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Senders</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --border:#2a313c; --text:#e6edf3;
+    --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'SF Pro',system-ui,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  nav a { color:var(--muted); margin-left:18px; text-decoration:none; font-size:13px; }
+  nav a:hover, nav a.active { color:var(--text); }
+  main { max-width:900px; margin:0 auto; padding:24px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+           padding:20px; margin-bottom:20px; }
+  .panel h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--muted);
+              text-transform:uppercase; letter-spacing:.05em; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500; }
+  input, textarea, select {
+    width:100%; background:#0d1117; border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:10px 12px; font:inherit;
+  }
+  textarea { min-height:60px; resize:vertical; }
+  .row { display:grid; gap:14px; margin-bottom:14px; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+  .row.three { grid-template-columns: 1fr 1fr 1fr; }
+  button { background:var(--accent); color:#0d1117; border:none; padding:9px 16px;
+           border-radius:6px; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+  button.danger { background:transparent; border:1px solid var(--red); color:var(--red); }
+  a { color:var(--accent); text-decoration:none; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .empty { color:var(--muted); padding:30px; text-align:center; }
+  .ok { color:var(--green); }
+  .err { color:var(--red); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; }
+  .pill.active { background:rgba(63,185,80,.15); color:var(--green); }
+  .pill.inactive { background:rgba(139,148,158,.15); color:var(--muted); }
+  .info { background:rgba(88,166,255,.08); border:1px solid rgba(88,166,255,.25);
+          padding:12px 14px; border-radius:6px; font-size:13px; margin-bottom:16px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Creator Scraper</h1>
+  <nav>
+    <a href="/">Jobs</a>
+    <a href="/creators.html">CRM</a>
+    <a href="/campaigns.html" class="active">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h2>Email Senders</h2>
+    <div id="sendersList"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Add New Sender</h2>
+    <div class="info">
+      <strong>Gmail setup:</strong> Generate an App Password at
+      <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>
+      (requires 2FA on the account). Use that 16-character password below, not the regular Gmail password.
+      Same App Password works for SMTP (sending) and IMAP (reply/bounce detection).
+    </div>
+    <form id="newSenderForm">
+      <div class="row two">
+        <div>
+          <label>Display name (your reference)</label>
+          <input name="name" type="text" placeholder="e.g. Mayank — Root Labs" required>
+        </div>
+        <div>
+          <label>From email (the actual address)</label>
+          <input name="from_email" type="text" placeholder="[email protected]" required>
+        </div>
+      </div>
+      <div class="row two">
+        <div>
+          <label>From name (shown to recipient)</label>
+          <input name="from_name" type="text" placeholder="Mayank Banka" required>
+        </div>
+        <div>
+          <label>SMTP user (usually same as from email)</label>
+          <input name="smtp_user" type="text" placeholder="[email protected]" required>
+        </div>
+      </div>
+      <div class="row two">
+        <div>
+          <label>SMTP App Password</label>
+          <input name="smtp_app_password" type="password" placeholder="16-char Google App Password" required>
+        </div>
+        <div>
+          <label>Daily send cap</label>
+          <input name="daily_cap" type="number" value="50" min="1" max="2000">
+          <div class="hint">Industry safe-deliverability cap for cold outreach is around 25 to 50 per fresh account, ramping up over weeks.</div>
+        </div>
+      </div>
+      <div class="row three">
+        <div>
+          <label>SMTP host</label>
+          <input name="smtp_host" type="text" value="smtp.gmail.com">
+        </div>
+        <div>
+          <label>SMTP port</label>
+          <input name="smtp_port" type="number" value="587">
+        </div>
+        <div>
+          <label>IMAP port</label>
+          <input name="imap_port" type="number" value="993">
+        </div>
+      </div>
+      <div class="row">
+        <label>Optional signature appended to all emails (you can also bake it into each template instead)</label>
+        <textarea name="signature" placeholder="(leave blank if your templates include the signature)"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button type="submit">Verify &amp; Add Sender</button>
+        <span id="newSenderMsg" class="hint"></span>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script>
+async function loadSenders() {
+  const r = await fetch("/api/senders");
+  const d = await r.json();
+  const list = document.getElementById("sendersList");
+  if (!d.senders?.length) {
+    list.innerHTML = '<div class="empty">No senders configured. Add one below.</div>';
+    return;
+  }
+  list.innerHTML = '<table><thead><tr><th>Name</th><th>From</th><th>Daily</th><th>Status</th><th></th></tr></thead><tbody>' +
+    d.senders.map(s => `
+      <tr>
+        <td><strong>${escapeHtml(s.name)}</strong></td>
+        <td>${escapeHtml(s.from_email)}<div class="hint">"${escapeHtml(s.from_name)}"</div></td>
+        <td>${s.sent_today} / ${s.daily_cap}</td>
+        <td><span class="pill ${s.active ? 'active' : 'inactive'}">${s.active ? 'active' : 'disabled'}</span></td>
+        <td><button class="${s.active ? 'danger' : 'secondary'}" onclick="toggle(${s.id}, ${!s.active})">${s.active ? 'Disable' : 'Enable'}</button></td>
+      </tr>`).join("") +
+    '</tbody></table>';
+}
+
+async function toggle(id, active) {
+  await fetch(`/api/senders/${id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }),
+  });
+  loadSenders();
+}
+
+document.getElementById("newSenderForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = Object.fromEntries(fd.entries());
+  const msg = document.getElementById("newSenderMsg");
+  msg.className = "hint";
+  msg.textContent = "Verifying SMTP credentials…";
+  try {
+    const r = await fetch("/api/senders", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "failed");
+    msg.className = "ok";
+    msg.textContent = `Added sender #${d.id}. Reloading…`;
+    setTimeout(() => location.reload(), 600);
+  } catch (err) {
+    msg.className = "err";
+    msg.textContent = "Error: " + err.message;
+  }
+};
+
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+loadSenders();
+</script>
+</body>
+</html>

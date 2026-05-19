@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Outreach</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --border:#2a313c; --text:#e6edf3;
+    --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'SF Pro',system-ui,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  nav a { color:var(--muted); margin-left:18px; text-decoration:none; font-size:13px; }
+  nav a:hover, nav a.active { color:var(--text); }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+           padding:20px; margin-bottom:20px; }
+  .panel h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--muted);
+              text-transform:uppercase; letter-spacing:.05em; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500; }
+  input[type=text], input[type=number], input[type=password], textarea, input[type=file], select {
+    width:100%; background:#0d1117; border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:10px 12px; font:inherit; font-family:inherit;
+  }
+  textarea { min-height:80px; resize:vertical; }
+  .row { display:grid; gap:14px; margin-bottom:14px; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+  .row.three { grid-template-columns: 1fr 1fr 1fr; }
+  .row.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  button { background:var(--accent); color:#0d1117; border:none; padding:9px 16px;
+           border-radius:6px; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+  button.danger { background:transparent; border:1px solid var(--red); color:var(--red); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  tr:hover td { background:rgba(255,255,255,.02); }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+  .pill.draft { background:rgba(210,153,34,.15); color:var(--amber); }
+  .pill.ready, .pill.active { background:rgba(63,185,80,.15); color:var(--green); }
+  .pill.paused, .pill.archived { background:rgba(139,148,158,.15); color:var(--muted); }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .empty { color:var(--muted); padding:40px 20px; text-align:center; }
+  .actions { display:flex; gap:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Creator Scraper</h1>
+  <nav>
+    <a href="/">Jobs</a>
+    <a href="/creators.html">CRM</a>
+    <a href="/campaigns.html" class="active">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h2>Outreach Campaigns</h2>
+    <p class="hint" style="margin-top:0;margin-bottom:14px">
+      A campaign is a category like "Medical Professional" or "Parents". Each one owns five email templates
+      (initial + four follow-ups) that share the same audience, sender, and personalization style.
+    </p>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button onclick="document.getElementById('newCampaign').scrollIntoView({behavior:'smooth'})">+ New Campaign</button>
+      <a href="/senders.html"><button class="secondary">⚙ Senders</button></a>
+      <a href="/outbox.html"><button class="secondary">📤 Outbox</button></a>
+    </div>
+    <div id="campaignsList"></div>
+  </div>
+
+  <div class="panel" id="newCampaign">
+    <h2>New Campaign</h2>
+    <div id="senderWarn" style="display:none;color:var(--amber);font-size:13px;margin-bottom:14px;
+                                padding:10px;background:rgba(210,153,34,.08);border-radius:6px">
+      No senders configured yet. <a href="/senders.html">Add a sender first</a>, then come back.
+    </div>
+    <form id="newCampaignForm">
+      <div class="row two">
+        <div>
+          <label>Name</label>
+          <input name="name" type="text" placeholder="e.g. Medical Professional" required>
+        </div>
+        <div>
+          <label>Sender</label>
+          <select name="sender_id" required>
+            <option value="">Loading…</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label>Description (internal only)</label>
+        <textarea name="description" placeholder="What audience is this for? What's the rough message?"></textarea>
+      </div>
+      <div class="row four">
+        <div>
+          <label>Delay before v1 (days)</label>
+          <input name="delay_days_v1" type="number" value="4" min="1" max="60">
+        </div>
+        <div>
+          <label>Delay before v2 (days)</label>
+          <input name="delay_days_v2" type="number" value="7" min="1" max="60">
+        </div>
+        <div>
+          <label>Delay before v3 (days)</label>
+          <input name="delay_days_v3" type="number" value="10" min="1" max="60">
+        </div>
+        <div>
+          <label>Delay before v4 (days)</label>
+          <input name="delay_days_v4" type="number" value="14" min="1" max="60">
+        </div>
+      </div>
+      <div class="hint">Delays are measured from the previous email's send time. So initial → 4 days → v1 → 7 days → v2 by default.</div>
+      <div style="margin-top:14px"><button type="submit">Create Campaign</button></div>
+      <div id="newMsg" class="hint" style="margin-top:10px"></div>
+    </form>
+  </div>
+</main>
+
+<script>
+async function loadCampaigns() {
+  const r = await fetch("/api/campaigns");
+  const d = await r.json();
+  const list = document.getElementById("campaignsList");
+  if (!d.campaigns?.length) {
+    list.innerHTML = '<div class="empty">No campaigns yet. Create one below.</div>';
+    return;
+  }
+  list.innerHTML = '<table><thead><tr><th>Name</th><th>Status</th><th>Sender</th><th>Templates</th><th>Creators</th><th>Sent</th><th></th></tr></thead><tbody>' +
+    d.campaigns.map(c => `
+      <tr>
+        <td><strong><a href="/campaign.html?id=${c.id}">${escapeHtml(c.name)}</a></strong>
+          ${c.description ? `<div class="hint">${escapeHtml(c.description).slice(0, 100)}</div>` : ''}</td>
+        <td><span class="pill ${c.status}">${c.status}</span></td>
+        <td>${escapeHtml(c.sender_name || '?')}<div class="hint">${escapeHtml(c.sender_from_email || '')}</div></td>
+        <td>${c.approved_templates}/5 approved</td>
+        <td>${c.creators}</td>
+        <td>${c.sent}</td>
+        <td><a href="/campaign.html?id=${c.id}">Edit →</a></td>
+      </tr>`).join("") +
+    '</tbody></table>';
+}
+
+async function loadSenders() {
+  const r = await fetch("/api/senders");
+  const d = await r.json();
+  const sel = document.querySelector('select[name="sender_id"]');
+  const active = (d.senders || []).filter(s => s.active);
+  if (!active.length) {
+    document.getElementById("senderWarn").style.display = "block";
+    sel.innerHTML = '<option value="">None available</option>';
+    return;
+  }
+  sel.innerHTML = active.map(s => `<option value="${s.id}">${escapeHtml(s.name)} — ${escapeHtml(s.from_email)}</option>`).join("");
+}
+
+document.getElementById("newCampaignForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = Object.fromEntries(fd.entries());
+  const msg = document.getElementById("newMsg");
+  try {
+    const r = await fetch("/api/campaigns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "create failed");
+    msg.className = "ok";
+    msg.textContent = `Created campaign #${d.id}. Redirecting…`;
+    setTimeout(() => location.href = `/campaign.html?id=${d.id}`, 500);
+  } catch (err) {
+    msg.className = "err";
+    msg.textContent = "Error: " + err.message;
+  }
+};
+
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+loadSenders();
+loadCampaigns();
+</script>
+</body>
+</html>

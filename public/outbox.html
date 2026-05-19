@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Outbox</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --border:#2a313c; --text:#e6edf3;
+    --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,'SF Pro',system-ui,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between;
+           padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  nav a { color:var(--muted); margin-left:18px; text-decoration:none; font-size:13px; }
+  nav a:hover, nav a.active { color:var(--text); }
+  main { max-width:1200px; margin:0 auto; padding:24px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+           padding:20px; margin-bottom:20px; }
+  .panel h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--muted);
+              text-transform:uppercase; letter-spacing:.05em; }
+  select, input { background:#0d1117; border:1px solid var(--border); color:var(--text);
+                  border-radius:6px; padding:8px 10px; font:inherit; }
+  button { background:var(--accent); color:#0d1117; border:none; padding:7px 12px;
+           border-radius:6px; font:inherit; font-weight:600; cursor:pointer; font-size:12px; }
+  button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+  button.danger { background:transparent; border:1px solid var(--red); color:var(--red); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  a { color:var(--accent); text-decoration:none; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; }
+  .pill.sent { background:rgba(63,185,80,.15); color:var(--green); }
+  .pill.approved, .pill.queued { background:rgba(88,166,255,.15); color:var(--accent); }
+  .pill.draft { background:rgba(210,153,34,.15); color:var(--amber); }
+  .pill.failed, .pill.bounced, .pill.cancelled { background:rgba(248,81,73,.15); color:var(--red); }
+  .pill.sending { background:rgba(210,153,34,.15); color:var(--amber); }
+  .filters { display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:14px; }
+  .filters label { display:block; font-size:11px; color:var(--muted); margin-bottom:4px; }
+  .empty { color:var(--muted); padding:30px; text-align:center; }
+  .hint { color:var(--muted); font-size:12px; }
+  .stats { display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
+  .stat { background:#0d1117; padding:8px 14px; border-radius:6px; border:1px solid var(--border); }
+  .stat .label { color:var(--muted); font-size:11px; text-transform:uppercase; }
+  .stat .value { font-size:18px; font-weight:600; }
+  .preview-cell { max-width:280px; }
+  .subject { font-weight:500; }
+  .body-preview { color:var(--muted); font-size:12px; margin-top:4px; max-height:2.4em; overflow:hidden; }
+  details summary { cursor:pointer; color:var(--accent); font-size:11px; }
+  .full-body { white-space:pre-wrap; font-family:ui-monospace,monospace; background:#0d1117;
+               padding:10px; border-radius:4px; margin-top:6px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Creator Scraper</h1>
+  <nav>
+    <a href="/">Jobs</a>
+    <a href="/creators.html">CRM</a>
+    <a href="/campaigns.html" class="active">Outreach</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h2>Outbox</h2>
+    <div class="filters">
+      <div>
+        <label>Campaign</label>
+        <select id="filterCampaign"><option value="">All campaigns</option></select>
+      </div>
+      <div>
+        <label>Status</label>
+        <select id="filterStatus">
+          <option value="">All</option>
+          <option value="draft">draft</option>
+          <option value="approved">approved (queued to send)</option>
+          <option value="sending">sending</option>
+          <option value="sent">sent</option>
+          <option value="failed">failed</option>
+          <option value="bounced">bounced</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+      </div>
+      <div>
+        <label>Handle</label>
+        <input id="filterHandle" type="text" placeholder="@handle">
+      </div>
+      <button onclick="loadEmails()">Apply</button>
+      <button onclick="bulkApproveDrafts()" class="secondary">Approve all drafts in campaign</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div id="list"></div>
+  </div>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+if (params.get("campaign_id")) document.getElementById("filterCampaign").value = params.get("campaign_id");
+
+async function loadCampaigns() {
+  const r = await fetch("/api/campaigns");
+  const d = await r.json();
+  const sel = document.getElementById("filterCampaign");
+  const preselect = params.get("campaign_id");
+  sel.innerHTML = '<option value="">All campaigns</option>' +
+    (d.campaigns || []).map(c => `<option value="${c.id}" ${preselect == c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join("");
+}
+
+async function loadEmails() {
+  const q = new URLSearchParams();
+  const cid = document.getElementById("filterCampaign").value;
+  const stat = document.getElementById("filterStatus").value;
+  const handle = document.getElementById("filterHandle").value.trim().replace(/^@/, "").toLowerCase();
+  if (cid) q.set("campaign_id", cid);
+  if (stat) q.set("status", stat);
+  if (handle) q.set("handle", handle);
+
+  const r = await fetch("/api/outreach-emails?" + q.toString());
+  const d = await r.json();
+  renderStats(d.emails);
+  renderList(d.emails);
+}
+
+function renderStats(emails) {
+  const counts = {};
+  for (const e of emails) counts[e.status] = (counts[e.status] || 0) + 1;
+  const stages = {};
+  for (const e of emails) if (e.status === 'sent') stages[e.stage] = (stages[e.stage] || 0) + 1;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><div class="label">Total shown</div><div class="value">${emails.length}</div></div>
+    <div class="stat"><div class="label">Sent</div><div class="value">${counts.sent || 0}</div></div>
+    <div class="stat"><div class="label">Approved (queued)</div><div class="value">${counts.approved || 0}</div></div>
+    <div class="stat"><div class="label">Drafts</div><div class="value">${counts.draft || 0}</div></div>
+    <div class="stat"><div class="label">Failed/Bounced</div><div class="value">${(counts.failed || 0) + (counts.bounced || 0)}</div></div>
+  `;
+}
+
+function renderList(emails) {
+  if (!emails.length) {
+    document.getElementById("list").innerHTML = '<div class="empty">No emails matching these filters.</div>';
+    return;
+  }
+  document.getElementById("list").innerHTML = `
+    <table>
+      <thead><tr>
+        <th>When</th><th>Handle / To</th><th>Campaign</th><th>Stage</th>
+        <th>Status</th><th class="preview-cell">Subject &amp; Body</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${emails.map(e => `
+        <tr>
+          <td><div>${e.sent_at ? new Date(e.sent_at).toLocaleString() : e.scheduled_at ? 'sched ' + new Date(e.scheduled_at).toLocaleString() : '—'}</div></td>
+          <td><a href="/creators.html?handle=${escapeAttr(e.handle)}">@${escapeHtml(e.handle)}</a>
+              <div class="hint">${escapeHtml(e.to_email)}</div></td>
+          <td>${escapeHtml(e.campaign_name || '?')}</td>
+          <td>${escapeHtml(e.stage)}</td>
+          <td><span class="pill ${e.status}">${e.status}</span>
+              ${e.error ? `<div class="hint" style="color:var(--red)">${escapeHtml(e.error).slice(0, 80)}</div>` : ''}</td>
+          <td class="preview-cell">
+            <div class="subject">${escapeHtml(e.subject || '(pending)')}</div>
+            <div class="body-preview">${escapeHtml((e.body || '').slice(0, 120))}</div>
+            <details><summary>Full body</summary>
+              <div class="full-body">${escapeHtml(e.body || '')}</div>
+            </details>
+          </td>
+          <td>
+            ${e.status === 'draft' && e.personalized_content ? `<button onclick="approve(${e.id})">Approve</button>` : ''}
+            ${['draft','approved','queued'].includes(e.status) ? `<button class="danger" onclick="cancelEmail(${e.id})">Cancel</button>` : ''}
+            ${e.status === 'failed' ? `<button onclick="retry(${e.id})" class="secondary">Retry</button>` : ''}
+          </td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+}
+
+async function approve(id) {
+  await fetch(`/api/outreach-emails/${id}/approve`, { method: "POST" });
+  loadEmails();
+}
+
+async function cancelEmail(id) {
+  if (!confirm("Cancel this email? It will not be sent.")) return;
+  await fetch(`/api/outreach-emails/${id}/cancel`, { method: "POST" });
+  loadEmails();
+}
+
+async function retry(id) {
+  await fetch(`/api/outreach-emails/${id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "approved" }),
+  });
+  loadEmails();
+}
+
+async function bulkApproveDrafts() {
+  const cid = document.getElementById("filterCampaign").value;
+  if (!cid) { alert("pick a campaign first"); return; }
+  if (!confirm("Approve all generated draft emails in this campaign? They will queue for sending.")) return;
+  const r = await fetch(`/api/campaigns/${cid}/approve-all-drafts`, { method: "POST" });
+  const d = await r.json();
+  alert(`Approved ${d.approved} drafts.`);
+  loadEmails();
+}
+
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+loadCampaigns().then(loadEmails);
+setInterval(loadEmails, 8000); // live refresh
+</script>
+</body>
+</html>
