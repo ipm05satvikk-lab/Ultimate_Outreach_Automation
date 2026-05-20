@@ -20,6 +20,6 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.16",
     "pg": "^8.13.1",
-    "playwright": "^1.49.1"
+    "playwright": "1.60.0"
   }
 }
