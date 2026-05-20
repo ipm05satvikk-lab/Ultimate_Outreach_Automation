@@ -1,7 +1,7 @@
 # Playwright's official image ships with Chromium + all its system deps
 # pre-installed. We add ffmpeg on top so the videos worker can strip audio
 # from downloaded mp4s before sending to Whisper.
-FROM mcr.microsoft.com/playwright:v1.49.1-jammy
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
