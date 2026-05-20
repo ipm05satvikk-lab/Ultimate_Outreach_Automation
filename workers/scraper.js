@@ -188,7 +188,7 @@ async function runApifyForHandles(handles) {
   let lastErr;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const run = await apify().actor(APIFY_ACTOR).call(input, { timeoutSecs: APIFY_TIMEOUT_S });
+     const run = await apify().actor(APIFY_ACTOR).call(input, { waitSecs: APIFY_TIMEOUT_S });
       const items = [];
       for await (const item of apify().dataset(run.defaultDatasetId).iterate()) {
         items.push(item);
