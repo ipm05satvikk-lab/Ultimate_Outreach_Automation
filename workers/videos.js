@@ -106,7 +106,7 @@ async function fetchVideosViaApify(handle, maxVideos) {
   };
   if (process.env.APIFY_PROXY_COUNTRY) input.proxyCountryCode = process.env.APIFY_PROXY_COUNTRY;
 
-  const run = await apifyClient().actor(APIFY_VIDEOS_ACTOR).call(input, { timeoutSecs: APIFY_TIMEOUT_S });
+  const run = await apifyClient().actor(APIFY_VIDEOS_ACTOR).call(input, { waitSecs: APIFY_TIMEOUT_S });
   const items = [];
   for await (const item of apifyClient().dataset(run.defaultDatasetId).iterate()) {
     items.push(item);
